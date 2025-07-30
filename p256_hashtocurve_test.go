@@ -74,12 +74,13 @@ func TestMapToCurve(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		x, y := nistec.GetX(p), nistec.GetY(p)
+		bytes := p.Bytes()
+		x, y := bytes[1:33], bytes[33:]
 		if fmt.Sprintf("%x", x) != tt.x {
-			t.Errorf("u = %s: got x = %x, want %s", tt.u, x, tt.x)
+			t.Errorf("u = %s:\ngot x = %x,\nwant    %s", tt.u, x, tt.x)
 		}
 		if fmt.Sprintf("%x", y) != tt.y {
-			t.Errorf("u = %s: got x = %x, want %s", tt.u, y, tt.y)
+			t.Errorf("u = %s:\ngot y = %x,\nwant    %s", tt.u, y, tt.y)
 		}
 	}
 }
