@@ -17,6 +17,7 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	zero := new(fiat.P256Element)
 	one := new(fiat.P256Element).One()
 	B := p256B()
+
 	// A = -3
 	A := new(fiat.P256Element)
 	for i := 0; i < 3; i++ {
@@ -27,24 +28,26 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	for i := 0; i < 10; i++ {
 		Z.Sub(Z, one)
 	}
+
+	// Precompute -B/A and B/ZA
+	// TODO: cache these
 	t0 := new(fiat.P256Element) // temporary
+	negBoverA := new(fiat.P256Element).Mul(
+		new(fiat.P256Element).Sub(zero, B),
+		new(fiat.P256Element).Invert(A),
+	)
+	ZA := new(fiat.P256Element).Mul(Z, A)
+	BoverZA := new(fiat.P256Element).Mul(B, t0.Invert(ZA))
+
 	// 1. tv1 = inv0(Z^2 * u^4 + Z * u^2)
 	Zu2 := new(fiat.P256Element).Mul(Z, t0.Square(u))
 	tv1 := new(fiat.P256Element).Add(Zu2, t0.Square(Zu2))
 	tv1.Invert(tv1)
 	// 2.  x1 = (-B / A) * (1 + tv1)
-	// TODO: -B/A could be precomputed
-	BoverA := new(fiat.P256Element).Mul(
-		new(fiat.P256Element).Sub(zero, B),
-		new(fiat.P256Element).Invert(A),
-	)
 	x1 := new(fiat.P256Element).Add(one, tv1)
-	x1.Mul(x1, BoverA)
+	x1.Mul(x1, negBoverA)
 	// 3.  If tv1 == 0, set x1 = B / (Z * A)
-	// TODO: B/ZA could be precomputed
-	ZA := new(fiat.P256Element).Mul(Z, A)
-	x1prime := new(fiat.P256Element).Mul(B, t0.Invert(ZA))
-	x1.Select(x1prime, x1, tv1.IsZero())
+	x1.Select(BoverZA, x1, tv1.IsZero())
 	// 4. gx1 = x1^3 + A * x1 + B
 	gx1 := new(fiat.P256Element)
 	p256Polynomial(gx1, x1)
