@@ -23,35 +23,11 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	rr := &p256Element{0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd}
 	p256Mul(u, u, rr)
 
-	B := &p256Element{0xd89cdf6229c4bddf, 0xacf005cd78843090, 0xe5a220abf7212ed6, 0xdc30061d04874834}
-	one := &p256One
-	negOne := new(p256Element)
-	*negOne = *one
-	p256NegCond(negOne, 1)
+	Z := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
+	negBoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
+	BoverZA := &p256Element{0x5c8dc32df0535ba9, 0xc17f77a98c8cf08d, 0x7696788e43f892a0, 0x9868003399c03e24}
 
-	// A = -3
-	A := new(p256Element)
-	for i := 0; i < 3; i++ {
-		p256Add(A, A, negOne)
-	}
-	// Z = -10
-	Z := new(p256Element)
-	for i := 0; i < 10; i++ {
-		p256Add(Z, Z, negOne)
-	}
-
-	// Precompute -B/A and B/ZA
-	// TODO: cache these
-	t0 := new(p256Element)
-	negBoverA := new(p256Element)
-	p256Inverse(t0, A)
-	p256NegCond(t0, 1)
-	p256Mul(negBoverA, B, t0)
-	ZA := new(p256Element)
-	p256Mul(ZA, Z, A)
-	BoverZA := new(p256Element)
-	p256Inverse(t0, ZA)
-	p256Mul(BoverZA, B, t0)
+	t0 := new(p256Element) // temporary
 
 	// 1. tv1 = inv0(Z^2 * u^4 + Z * u^2)
 	Zu2 := new(p256Element)
@@ -63,7 +39,7 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	p256Inverse(tv1, tv1)
 	// 2.  x1 = (-B / A) * (1 + tv1)
 	x1 := new(p256Element)
-	p256Add(x1, one, tv1)
+	p256Add(x1, &p256One, tv1)
 	p256Mul(x1, x1, negBoverA)
 	// 3.  If tv1 == 0, set x1 = B / (Z * A)
 	if p256Equal(tv1, &p256Zero) == 1 { // TODO: constant time
