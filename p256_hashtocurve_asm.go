@@ -2,13 +2,20 @@
 
 package nistec
 
-import "errors"
+import (
+	"errors"
+)
 
 // RFC9380
 //
 // Section 6.6.2 Simplified Shallue-van de Woestijne-Ulas Method
 
 func P256MapToCurve(bytes []byte) (*P256Point, error) {
+	var p P256Point
+	return p256MapToCurve(&p, bytes)
+}
+
+func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	if len(bytes) != 32 {
 		return nil, errors.New("invalid P256 element encoding")
 	}
@@ -69,7 +76,10 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	cond := sgn0u ^ sgn0(y)
 	p256NegCond(y, cond)
 	// 10. return (x, y)
-	return &P256Point{*x, *y, *one}, nil
+	p.x = *x
+	p.y = *y
+	p.z = p256One
+	return p, nil
 }
 
 func sgn0(y *p256Element) int {
