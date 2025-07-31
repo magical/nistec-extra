@@ -1,5 +1,3 @@
-//go:build purego || (!amd64 && !arm64 && !(ppc64le && go1.19) && !s390x)
-
 package nistec_test
 
 import (
@@ -81,6 +79,28 @@ func TestMapToCurve(t *testing.T) {
 		}
 		if fmt.Sprintf("%x", y) != tt.y {
 			t.Errorf("u = %s:\ngot y = %x,\nwant    %s", tt.u, y, tt.y)
+		}
+	}
+}
+
+func BenchmarkMapToCurve(b *testing.B) {
+	b.ReportAllocs()
+	u0, err := hex.DecodeString("4ebc95a6e839b1ae3c63b847798e85cb3c12d3817ec6ebc10af6ee51adb29fec")
+	if err != nil {
+		b.Fatalf("u0: %v", err)
+	}
+	u1, err := hex.DecodeString("4e21af88e22ea80156aff790750121035b3eefaa96b425a8716e0d20b4e269ee")
+	if err != nil {
+		b.Fatalf("u1: %v", err)
+	}
+	for i := 0; i < b.N; i++ {
+		u := u0
+		if uint(i)%2 == 1 {
+			u = u1
+		}
+		_, err := nistec.P256MapToCurve(u)
+		if err != nil {
+			b.Fatalf("i=%d: %v", i, err)
 		}
 	}
 }
