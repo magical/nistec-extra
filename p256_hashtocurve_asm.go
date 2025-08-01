@@ -74,10 +74,15 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	}
 	p256Mul(x1n, x1n, B)
 	// mul denominator by A
+	// we could save these two ADDs by precomputing B/A
 	tv5 := new(p256Element)
 	p256Add(tv5, tv4, tv4)
 	p256Add(tv4, tv4, tv5)
 	p256NegCond(tv4, isZero)
+
+	//  Compute tv2 = (xn^3 + A * xd^2 * xn) + B * xd^3
+	//  and tv6 = xd^3
+	//  => tv2/tv6 = (xn/xd)^3 + A*(xn/xd) + B
 
 	//   9.  tv2 = x1n^2
 	p256Sqr(tv2, x1n, 1)
@@ -98,7 +103,8 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256Mul(tv5, B, tv6)
 	//   16. tv2 = tv2 + tv5
 	p256Add(tv2, tv2, tv5)
-	//   17.   x = tv1 * x1n
+
+	//   17.   x = tv1 * x1n = Zu^2 * x1n
 	x := new(p256Element)
 	p256Mul(x, Zu2, x1n)
 	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
