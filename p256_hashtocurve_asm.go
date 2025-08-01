@@ -30,14 +30,10 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	rr := &p256Element{0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd}
 	p256Mul(u, u, rr)
 
-	B := &p256Element{0xd89cdf6229c4bddf, 0xacf005cd78843090, 0xe5a220abf7212ed6, 0xdc30061d04874834}
+	//B := &p256Element{0xd89cdf6229c4bddf, 0xacf005cd78843090, 0xe5a220abf7212ed6, 0xdc30061d04874834}
 	Z := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
-	//negBoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
-	//BoverZA := &p256Element{0x5c8dc32df0535ba9, 0xc17f77a98c8cf08d, 0x7696788e43f892a0, 0x9868003399c03e24}
-
-	sqrtZm := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
-	p256NegCond(sqrtZm, 1)
-	p256Sqrt(sqrtZm, sqrtZm)
+	BoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
+	sqrtZm := &p256Element{0xa1fd38ee98a195fd, 0x78400ad7423dcf70, 0x6913c88f9ea8dfee, 0x9051d26e12a8f304}
 
 	// Steps:
 	// tv2 = Z^2 * u^4 + Z * u^2
@@ -72,12 +68,7 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	} else {
 		*tv4 = *tv2
 	}
-	p256Mul(x1n, x1n, B)
-	// mul denominator by A
-	// we could save these two ADDs by precomputing B/A
-	tv5 := new(p256Element)
-	p256Add(tv5, tv4, tv4)
-	p256Add(tv4, tv4, tv5)
+	p256Mul(x1n, x1n, BoverA)
 	p256NegCond(tv4, isZero)
 
 	//   25.   x = x / tv4
