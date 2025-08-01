@@ -35,6 +35,10 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//negBoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
 	//BoverZA := &p256Element{0x5c8dc32df0535ba9, 0xc17f77a98c8cf08d, 0x7696788e43f892a0, 0x9868003399c03e24}
 
+	sqrtZm := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
+	p256NegCond(sqrtZm, 1)
+	p256Sqrt(sqrtZm, sqrtZm)
+
 	// Steps:
 	// tv2 = Z^2 * u^4 + Z * u^2
 	//   1.  tv1 = u^2
@@ -98,13 +102,15 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	x := new(p256Element)
 	p256Mul(x, Zu2, tv3)
 	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
+	y := new(p256Element)
 	y1 := new(p256Element)
 	isSquare := p256SqrtRatio(y1, tv2, tv6)
+	y2 := new(p256Element)
 	//   19.   y = tv1 * u
-	y := new(p256Element)
-	p256Mul(y, Zu2, u)
 	//   20.   y = y * y1
-	p256Mul(y, y, y1)
+	p256Mul(y2, Zu2, u)
+	p256Mul(y2, y2, sqrtZm)
+	p256Mul(y2, y2, y1)
 	//   21.   x = CMOV(x, tv3, is_gx1_square)
 	//   22.   y = CMOV(y, y1, is_gx1_square)
 	if isSquare == 1 {
@@ -113,6 +119,7 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 		*y = *y1
 	} else {
 		//fmt.Printf("isn't square (u=%x)\n", bytes)
+		*y = *y2
 	}
 
 	// If sgn0(u) != sgn0(y), set y = -y
@@ -220,19 +227,9 @@ func p256SqrtRatio(z, u, v *p256Element) (isSquare int) {
 	// z = z*uv
 	p256Mul(z, z, uv)
 
-	Z := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
-	p256NegCond(Z, 1)
-	if !p256Sqrt(Z, Z) {
-		panic("ugh")
-	}
-
 	// now check that it's actually the root
 	// (u == z^2 * v)
 	p256Sqr(t0, z, 1)
 	p256Mul(t0, t0, v)
-	if p256Equal(t0, u) == 0 {
-		p256Mul(z, z, Z)
-		return 0
-	}
-	return 1
+	return p256Equal(t0, u)
 }
