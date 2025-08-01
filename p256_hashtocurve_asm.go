@@ -70,12 +70,29 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	}
 
 	//   25.   x1 = x1 / x1d
-	p256Inverse(x1d, x1d)
-	p256Mul(x1, x1, x1d)
+	//p256Inverse(x1d, x1d)
+	//p256Mul(x1, x1, x1d)
+	//*x1d = p256One
 
-	// 4. gx1 = x1^3 + A * x1 + B
+	// 4. gx1 = x1^3 + A * x1 x1d^2 + B x1d^3
+	// and gd = x1d^3
 	gx1 := new(p256Element)
-	p256Polynomial(gx1, x1)
+	p256Sqr(gx1, x1, 1)
+	p256Mul(gx1, gx1, x1)
+
+	p256Sqr(t0, x1d, 1)
+	gd := new(p256Element)
+	p256Mul(gd, t0, x1d)
+	// t1 = -3*x1 xd^2
+	p256Mul(t1, t0, x1)
+	p256Add(t0, t1, t1)
+	p256Add(t0, t0, t1)
+	p256NegCond(t0, 1)
+	p256Add(gx1, gx1, t0)
+
+	B := &p256Element{0xd89cdf6229c4bddf, 0xacf005cd78843090, 0xe5a220abf7212ed6, 0xdc30061d04874834}
+	p256Mul(t0, gd, B)
+	p256Add(gx1, gx1, t0)
 
 	// 5.  x2 = Z * u^2 * x1
 	x2 := new(p256Element)
@@ -83,7 +100,7 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 
 	// 6. (y1, isSquare) = sqrt(gx1)
 	y1 := new(p256Element)
-	isSquare := p256SqrtCandidate(y1, gx1)
+	isSquare := p256SqrtRatio(y1, gx1, gd)
 
 	// Through some sort of freaky magic,
 	// it turns out that if x1 is not square then
@@ -114,10 +131,17 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	cond := sgn0u ^ sgn0(y)
 	p256NegCond(y, cond)
 
+	//p256Inverse(x1d, x1d)
+	//p256Mul(x, x, x1d)
+
+	// convert to affine coordinates
+	p256Mul(x, x, x1d)
+	p256Mul(y, y, gd) // y = y * x1d^3
+
 	// 10. return (x, y)
 	p.x = *x
 	p.y = *y
-	p.z = p256One
+	p.z = *x1d
 	return p, nil
 }
 
@@ -127,29 +151,67 @@ func sgn0(y *p256Element) int {
 	return int(y0[0] & 1)
 }
 
-// mysqrt sets z to a candidate square root of x
-// and returns 1 if x is a square and 0 if not.
-func p256SqrtCandidate(z, x *p256Element) (isSquare int) {
-	t0, t1 := new(p256Element), new(p256Element)
-	// see comment in p256Sqrt
-	p256Sqr(t0, x, 1)
-	p256Mul(t0, x, t0)
-	p256Sqr(t1, t0, 2)
-	p256Mul(t0, t0, t1)
-	p256Sqr(t1, t0, 4)
-	p256Mul(t0, t0, t1)
-	p256Sqr(t1, t0, 8)
-	p256Mul(t0, t0, t1)
-	p256Sqr(t1, t0, 16)
-	p256Mul(t0, t0, t1)
-	p256Sqr(t0, t0, 32)
-	p256Mul(t0, x, t0)
-	p256Sqr(t0, t0, 96)
-	p256Mul(t0, x, t0)
-	p256Sqr(t0, t0, 94)
+// mysqrt sets z to a candidate square root of (u/v)
+// and returns 1 if (u/v) is a square and 0 if not.
+func p256SqrtRatio(z, u, v *p256Element) (isSquare int) {
+	// this is pretty clever!
+	// normally we can calculate the square root of an element x
+	// by raising x^((p+1)/4)
+	// which works for number theory reasons, and because p=3 mod 4
+	//
+	// we could use that to find sqrt(u/v) by calculating x=u/v
+	// but there's a shortcut that doesn't require inverting v:
+	// instead of doing x^((p+1)/4), stop short at x^((p+1)/4 - 1) = x^((p-3)/4)
+	// which calculates the reciprocal square root, x^(-1/2)
+	// and instead of using x=u/v use x=uv^3
+	// so we get (uv^3)^(-1/2) = u^(-1/2) v^(-3/2)
+	// and then multiply that by uv to get
+	// u^(1/2) v^(-1/2) = (u/v)^(1/2)
+	// poof!
+	// sqrt(u/v) without any inversions
+	//
+	//
+	// x = uv*v^2
+	uv := new(p256Element)
+	p256Mul(uv, u, v)
+	x := new(p256Element)
+	p256Sqr(x, v, 1)
+	p256Mul(x, uv, x)
 
-	*z = *t0
-	// Check if we found a root
-	p256Sqr(t1, t0, 1)
-	return p256Equal(t1, x)
+	// z = x^((p-3)/4)
+	// as it turns out, this is the same as the chain for inversion
+	// but without the last couple multiplies
+	t0 := new(p256Element)
+	t1 := new(p256Element)
+	p256Sqr(z, x, 1)     // double  z       x
+	p256Mul(z, x, z)     // add     z       x       z
+	p256Sqr(z, z, 1)     // double  z       z
+	p256Mul(z, x, z)     // add     z       x       z
+	p256Sqr(t0, z, 3)    // shift   t0      z       3
+	p256Mul(t0, z, t0)   // add     t0      z       t0
+	p256Sqr(t1, t0, 6)   // shift   t1      t0      6
+	p256Mul(t0, t0, t1)  // add     t0      t0      t1
+	p256Sqr(t0, t0, 3)   // shift   t0      t0      3
+	p256Mul(z, z, t0)    // add     z       z       t0
+	p256Sqr(t0, z, 1)    // double  t0      z
+	p256Mul(t0, x, t0)   // add     t0      x       t0
+	p256Sqr(t1, t0, 16)  // shift   t1      t0      16
+	p256Mul(t0, t0, t1)  // add     t0      t0      t1
+	p256Sqr(t0, t0, 15)  // shift   t0      t0      15
+	p256Mul(z, z, t0)    // add     z       z       t0
+	p256Sqr(t0, t0, 17)  // shift   t0      t0      17
+	p256Mul(t0, x, t0)   // add     t0      x       t0
+	p256Sqr(t0, t0, 143) // shift   t0      t0      143
+	p256Mul(t0, z, t0)   // add     t0      z       t0
+	p256Sqr(t0, t0, 47)  // shift   t0      t0      47
+	p256Mul(z, z, t0)    // add     z       z       t0
+
+	// z = z*uv
+	p256Mul(z, z, uv)
+
+	// now check that it's actually the root
+	// (u == z^2 * v)
+	p256Sqr(t0, z, 1)
+	p256Mul(t0, t0, v)
+	return p256Equal(t0, u)
 }
