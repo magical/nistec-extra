@@ -54,33 +54,33 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256Sqr(t0, Zu2, 1)
 	p256Add(tv2, Zu2, t0)
 
-	// x1 = (-B / A) * (1 + tv1) if tv1 != 0
-	//      B / Z * A            if tv1 == 0
-	//    = tv3/tv4
+	// x1 = -B/A * (1 + tv2) / tv2 if tv2 != 0
+	//       B/A *         1 / Z   if tv2 == 0
 	//
 	//   5.  tv3 = tv2 + 1
 	//   6.  tv3 = B * tv3
 	//   7.  tv4 = CMOV(Z, -tv2, tv2 != 0)
 	//   8.  tv4 = A * tv4
 
-	tv3 := new(p256Element)
-	p256Add(tv3, tv2, &p256One)
-	p256Mul(tv3, tv3, B)
+	x1n := new(p256Element)
+	p256Add(x1n, tv2, &p256One)
 	tv4 := new(p256Element)
-	if p256Equal(tv2, &p256Zero) == 1 { // TODO: constant time
+	isZero := p256Equal(tv2, &p256Zero)
+	if isZero == 1 { // TODO constant time
+		//fmt.Printf("tv1 is zero (u=%x)\n", bytes)
 		*tv4 = *Z
 	} else {
-		//fmt.Printf("tv1 is zero (u=%x)\n", bytes)
 		*tv4 = *tv2
-		p256NegCond(tv4, 1)
 	}
+	p256Mul(x1n, x1n, B)
+	// mul denominator by A
 	tv5 := new(p256Element)
 	p256Add(tv5, tv4, tv4)
 	p256Add(tv4, tv4, tv5)
-	p256NegCond(tv4, 1)
+	p256NegCond(tv4, isZero)
 
-	//   9.  tv2 = tv3^2
-	p256Sqr(tv2, tv3, 1)
+	//   9.  tv2 = x1n^2
+	p256Sqr(tv2, x1n, 1)
 	//   10. tv6 = tv4^2
 	tv6 := new(p256Element)
 	p256Sqr(tv6, tv4, 1)
@@ -90,17 +90,17 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256NegCond(tv5, 1)
 	//   12. tv2 = tv2 + tv5
 	p256Add(tv2, tv2, tv5)
-	//   13. tv2 = tv2 * tv3
-	p256Mul(tv2, tv2, tv3)
+	//   13. tv2 = tv2 * x1n
+	p256Mul(tv2, tv2, x1n)
 	//   14. tv6 = tv6 * tv4
 	p256Mul(tv6, tv6, tv4)
 	//   15. tv5 = B * tv6
 	p256Mul(tv5, B, tv6)
 	//   16. tv2 = tv2 + tv5
 	p256Add(tv2, tv2, tv5)
-	//   17.   x = tv1 * tv3
+	//   17.   x = tv1 * x1n
 	x := new(p256Element)
-	p256Mul(x, Zu2, tv3)
+	p256Mul(x, Zu2, x1n)
 	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
 	y := new(p256Element)
 	y1 := new(p256Element)
@@ -111,11 +111,11 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256Mul(y2, Zu2, u)
 	p256Mul(y2, y2, sqrtZm)
 	p256Mul(y2, y2, y1)
-	//   21.   x = CMOV(x, tv3, is_gx1_square)
+	//   21.   x = CMOV(x, x1n, is_gx1_square)
 	//   22.   y = CMOV(y, y1, is_gx1_square)
 	if isSquare == 1 {
 		// TODO: constant time
-		*x = *tv3
+		*x = *x1n
 		*y = *y1
 	} else {
 		//fmt.Printf("isn't square (u=%x)\n", bytes)
