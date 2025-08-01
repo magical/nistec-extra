@@ -30,28 +30,24 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	rr := &p256Element{0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd}
 	p256Mul(u, u, rr)
 
-	//B := &p256Element{0xd89cdf6229c4bddf, 0xacf005cd78843090, 0xe5a220abf7212ed6, 0xdc30061d04874834}
-	Z := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
-	BoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
-	sqrtZm := &p256Element{0xa1fd38ee98a195fd, 0x78400ad7423dcf70, 0x6913c88f9ea8dfee, 0x9051d26e12a8f304}
-
 	// Steps:
-	// tv2 = Z^2 * u^4 + Z * u^2
+	// t1 = Z^2 * u^4 + Z * u^2
 	//   1.  tv1 = u^2
 	//   2.  tv1 = Z * tv1
 	//   3.  tv2 = tv1^2
 	//   4.  tv2 = tv2 + tv1
 
+	Z := &p256Element{0xfffffffffffffff5, 0xaffffffff, 0x0, 0xfffffff50000000b}
 	Zu2 := new(p256Element)
 	t0 := new(p256Element)
 	p256Sqr(t0, u, 1)
 	p256Mul(Zu2, Z, t0)
-	tv2 := new(p256Element)
+	t1 := new(p256Element)
 	p256Sqr(t0, Zu2, 1)
-	p256Add(tv2, Zu2, t0)
+	p256Add(t1, Zu2, t0)
 
-	// x1 = -B/A * (1 + tv2) / tv2 if tv2 != 0
-	//       B/A *         1 / Z   if tv2 == 0
+	// x1 = -B/A * (1 + t1) / t1  if t1 != 0
+	//       B/A *        1 / Z   if t1 == 0
 	//
 	//   5.  tv3 = tv2 + 1
 	//   6.  tv3 = B * tv3
@@ -59,17 +55,19 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//   8.  tv4 = A * tv4
 
 	x1 := new(p256Element)
-	p256Add(x1, tv2, &p256One)
+	p256Add(x1, t1, &p256One)
+	isZero := p256Equal(t1, &p256Zero)
+	p256NegCond(x1, isZero)
+	BoverA := &p256Element{0x9d899fcb6341949f, 0x8efaac9a7d816585, 0xa1e0b58ea7b5ba47, 0xf410020901826d67}
+	p256Mul(x1, x1, BoverA)
+
 	x1d := new(p256Element)
-	isZero := p256Equal(tv2, &p256Zero)
 	if isZero == 1 { // TODO constant time
 		//fmt.Printf("tv1 is zero (u=%x)\n", bytes)
 		*x1d = *Z
 	} else {
-		*x1d = *tv2
+		*x1d = *t1
 	}
-	p256Mul(x1, x1, BoverA)
-	p256NegCond(x1d, isZero)
 
 	//   25.   x1 = x1 / x1d
 	p256Inverse(x1d, x1d)
@@ -83,7 +81,7 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	x2 := new(p256Element)
 	p256Mul(x2, Zu2, x1)
 
-	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
+	// 6. (y1, isSquare) = sqrt(gx1)
 	y1 := new(p256Element)
 	isSquare := p256SqrtCandidate(y1, gx1)
 
@@ -92,11 +90,10 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	// x2=Z*u^2*x1 will be, AND we can obtain
 	// its square root by multiplying our failed square
 	// root by -Z^(3/2)*u^3.
-	//   19.   y = tv1 * u
-	//   20.   y = y * y1
 	y2 := new(p256Element)
 	p256Mul(y2, Zu2, u)
-	p256Mul(y2, y2, sqrtZm)
+	sqrtNegZ := &p256Element{0xa1fd38ee98a195fd, 0x78400ad7423dcf70, 0x6913c88f9ea8dfee, 0x9051d26e12a8f304}
+	p256Mul(y2, y2, sqrtNegZ)
 	p256Mul(y2, y2, y1)
 
 	//   21.   x = CMOV(x, x1, is_gx1_square)
@@ -114,8 +111,6 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	}
 
 	// If sgn0(u) != sgn0(y), set y = -y
-	//   23.  e1 = sgn0(u) == sgn0(y)
-	//   24.   y = CMOV(-y, y, e1)
 	cond := sgn0u ^ sgn0(y)
 	p256NegCond(y, cond)
 
