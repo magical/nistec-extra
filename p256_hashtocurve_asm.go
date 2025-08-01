@@ -58,48 +58,58 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//   7.  tv4 = CMOV(Z, -tv2, tv2 != 0)
 	//   8.  tv4 = A * tv4
 
-	x1n := new(p256Element)
-	p256Add(x1n, tv2, &p256One)
-	tv4 := new(p256Element)
+	x1 := new(p256Element)
+	p256Add(x1, tv2, &p256One)
+	x1d := new(p256Element)
 	isZero := p256Equal(tv2, &p256Zero)
 	if isZero == 1 { // TODO constant time
 		//fmt.Printf("tv1 is zero (u=%x)\n", bytes)
-		*tv4 = *Z
+		*x1d = *Z
 	} else {
-		*tv4 = *tv2
+		*x1d = *tv2
 	}
-	p256Mul(x1n, x1n, BoverA)
-	p256NegCond(tv4, isZero)
+	p256Mul(x1, x1, BoverA)
+	p256NegCond(x1d, isZero)
 
-	//   25.   x = x / tv4
-	p256Inverse(tv4, tv4)
-	p256Mul(x1n, x1n, tv4)
+	//   25.   x1 = x1 / x1d
+	p256Inverse(x1d, x1d)
+	p256Mul(x1, x1, x1d)
 
 	// 4. gx1 = x1^3 + A * x1 + B
 	gx1 := new(p256Element)
-	p256Polynomial(gx1, x1n)
+	p256Polynomial(gx1, x1)
 
-	//   17.   x = tv1 * x1n = Zu^2 * x1n
-	x := new(p256Element)
-	p256Mul(x, Zu2, x1n)
+	// 5.  x2 = Z * u^2 * x1
+	x2 := new(p256Element)
+	p256Mul(x2, Zu2, x1)
+
 	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
-	y := new(p256Element)
 	y1 := new(p256Element)
 	isSquare := p256SqrtRatio(y1, gx1, &p256One)
-	y2 := new(p256Element)
+
+	// Through some sort of freaky magic,
+	// it turns out that if x1 is not square then
+	// x2=Z*u^2*x1 will be, AND we can obtain
+	// its square root by multiplying our failed square
+	// root by -Z^(3/2)*u^3.
 	//   19.   y = tv1 * u
 	//   20.   y = y * y1
+	y2 := new(p256Element)
 	p256Mul(y2, Zu2, u)
 	p256Mul(y2, y2, sqrtZm)
 	p256Mul(y2, y2, y1)
-	//   21.   x = CMOV(x, x1n, is_gx1_square)
+
+	//   21.   x = CMOV(x, x1, is_gx1_square)
 	//   22.   y = CMOV(y, y1, is_gx1_square)
+	x := new(p256Element)
+	y := new(p256Element)
 	if isSquare == 1 {
 		// TODO: constant time
-		*x = *x1n
+		*x = *x1
 		*y = *y1
 	} else {
 		//fmt.Printf("isn't square (u=%x)\n", bytes)
+		*x = *x2
 		*y = *y2
 	}
 
@@ -108,28 +118,6 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//   24.   y = CMOV(-y, y, e1)
 	cond := sgn0u ^ sgn0(y)
 	p256NegCond(y, cond)
-	// 26. return (x, y)
-
-	/*
-		// 5.  x2 = Z * u^2 * x1
-		x2 := new(p256Element)
-		p256Mul(x2, Zu2, x1)
-		// 6. gx2 = x2^3 + A * x2 + B
-		gx2 := new(p256Element)
-		p256Polynomial(gx2, x2)
-		// 7.  If is_square(gx1), set x = x1 and y = sqrt(gx1)
-		// 8.  Else set x = x2 and y = sqrt(gx2)
-		c1 := new(p256Element)
-		c2 := new(p256Element)
-		isSquare := mysqrt(c1, gx1)
-		mysqrt(c2, gx2)
-		var x, y = x2, c2
-		//fmt.Printf("%x: issquare=%d\n", bytes, isSquare)
-		if isSquare == 1 { // TODO: constant time
-			x = x1
-			y = c1
-		}
-	*/
 
 	// 10. return (x, y)
 	p.x = *x
