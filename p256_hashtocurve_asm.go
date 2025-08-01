@@ -80,29 +80,13 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256Add(tv4, tv4, tv5)
 	p256NegCond(tv4, isZero)
 
-	//  Compute tv2 = (xn^3 + A * xd^2 * xn) + B * xd^3
-	//  and tv6 = xd^3
-	//  => tv2/tv6 = (xn/xd)^3 + A*(xn/xd) + B
+	//   25.   x = x / tv4
+	p256Inverse(tv4, tv4)
+	p256Mul(x1n, x1n, tv4)
 
-	//   9.  tv2 = x1n^2
-	p256Sqr(tv2, x1n, 1)
-	//   10. tv6 = tv4^2
-	tv6 := new(p256Element)
-	p256Sqr(tv6, tv4, 1)
-	//   11. tv5 = A * tv6
-	p256Add(tv5, tv6, tv6)
-	p256Add(tv5, tv5, tv6)
-	p256NegCond(tv5, 1)
-	//   12. tv2 = tv2 + tv5
-	p256Add(tv2, tv2, tv5)
-	//   13. tv2 = tv2 * x1n
-	p256Mul(tv2, tv2, x1n)
-	//   14. tv6 = tv6 * tv4
-	p256Mul(tv6, tv6, tv4)
-	//   15. tv5 = B * tv6
-	p256Mul(tv5, B, tv6)
-	//   16. tv2 = tv2 + tv5
-	p256Add(tv2, tv2, tv5)
+	// 4. gx1 = x1^3 + A * x1 + B
+	gx1 := new(p256Element)
+	p256Polynomial(gx1, x1n)
 
 	//   17.   x = tv1 * x1n = Zu^2 * x1n
 	x := new(p256Element)
@@ -110,7 +94,7 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//   18. (is_gx1_square, y1) = sqrt_ratio(tv2, tv6)
 	y := new(p256Element)
 	y1 := new(p256Element)
-	isSquare := p256SqrtRatio(y1, tv2, tv6)
+	isSquare := p256SqrtRatio(y1, gx1, &p256One)
 	y2 := new(p256Element)
 	//   19.   y = tv1 * u
 	//   20.   y = y * y1
@@ -133,15 +117,9 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	//   24.   y = CMOV(-y, y, e1)
 	cond := sgn0u ^ sgn0(y)
 	p256NegCond(y, cond)
-	//   25.   x = x / tv4
-	p256Inverse(tv4, tv4)
-	p256Mul(x, x, tv4)
 	// 26. return (x, y)
 
 	/*
-		// 4. gx1 = x1^3 + A * x1 + B
-		gx1 := new(p256Element)
-		p256Polynomial(gx1, x1)
 		// 5.  x2 = Z * u^2 * x1
 		x2 := new(p256Element)
 		p256Mul(x2, Zu2, x1)
