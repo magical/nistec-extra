@@ -1,8 +1,10 @@
 package nistec_test
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 
 	"filippo.io/nistec"
@@ -103,4 +105,155 @@ func BenchmarkMapToCurve(b *testing.B) {
 			b.Fatalf("i=%d: %v", i, err)
 		}
 	}
+}
+
+func TestReduceBytes48(t *testing.T) {
+	b := make([]byte, 48)
+	for i := range b[16:] {
+		b[16+i] = byte(i)
+	}
+	actual := nistec.TestReduceBytes48(b)
+	expected := ""
+	if expected != fmt.Sprintf("%x", actual) {
+		t.Errorf("\ngot %x\nwant %s", actual, expected)
+	}
+
+	b = make([]byte, 48)
+	b[15] = 1
+	actual = nistec.TestReduceBytes48(b)
+	expected = ""
+	if expected != fmt.Sprintf("%x", actual) {
+		t.Errorf("\ngot %x\nwant %s", actual, expected)
+	}
+
+	b = make([]byte, 48)
+	for i := range b {
+		b[i] = 1
+	}
+	actual = nistec.TestReduceBytes48(b)
+	expected = ""
+	if expected != fmt.Sprintf("%x", actual) {
+		t.Errorf("\ngot %x\nwant %s", actual, expected)
+	}
+
+	b = make([]byte, 48)
+	for i := range b {
+		b[i] = 0xff
+	}
+	actual = nistec.TestReduceBytes48(b)
+	expected = ""
+	if expected != fmt.Sprintf("%x", actual) {
+		t.Errorf("\ngot %x\nwant %s", actual, expected)
+	}
+}
+
+func TestHashToCurve(t *testing.T) {
+	//fmt.Printf("%x\n", expandMessage(nil, []byte("QUUX-V01-CS02-with-expander-SHA256-128"), 0x20))
+
+	dst := []byte("QUUX-V01-CS02-with-P256_XMD:SHA-256_SSWU_RO_")
+	//b := expandMessage(nil, dst, 96)
+	//p, err := nistec.HashToCurve(b)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//fmt.Printf("%x", b)
+	//t.Errorf("%x", p.Bytes()[1:])
+
+	for _, tt := range []struct{ name, msg, x, y string }{
+		{
+			msg: "",
+			x:   "2c15230b26dbc6fc9a37051158c95b79656e17a1a920b11394ca91c44247d3e4",
+			y:   "8a7a74985cc5c776cdfe4b1f19884970453912e9d31528c060be9ab5c43e8415",
+		},
+		{
+			msg: "abc",
+			x:   "0bb8b87485551aa43ed54f009230450b492fead5f1cc91658775dac4a3388a0f",
+			y:   "5c41b3d0731a27a7b14bc0bf0ccded2d8751f83493404c84a88e71ffd424212e",
+		},
+		{
+			msg: "abcdef0123456789",
+			x:   "65038ac8f2b1def042a5df0b33b1f4eca6bff7cb0f9c6c1526811864e544ed80",
+			y:   "cad44d40a656e7aff4002a8de287abc8ae0482b5ae825822bb870d6df9b56ca3",
+		},
+		{
+			name: "q128",
+			msg:  "q128_" + strings.Repeat("q", 128),
+			x:    "4be61ee205094282ba8a2042bcb48d88dfbb609301c49aa8b078533dc65a0b5d",
+			y:    "98f8df449a072c4721d241a3b1236d3caccba603f916ca680f4539d2bfb3c29e",
+		},
+		{
+			name: "a512",
+			msg:  "a512_" + strings.Repeat("a", 512),
+			x:    "457ae2981f70ca85d8e24c308b14db22f3e3862c5ea0f652ca38b5e49cd64bc5",
+			y:    "ecb9f0eadc9aeed232dabc53235368c1394c78de05dd96893eefa62b0f4757dc",
+		},
+	} {
+		name := tt.name
+		if name == "" {
+			name = tt.msg
+		}
+		t.Run(name, func(t *testing.T) {
+			expandedBytes := expandMessage([]byte(tt.msg), dst, 96)
+			p, err := nistec.HashToCurve(expandedBytes)
+			if err != nil {
+				t.Errorf("MapToCurve failed: %v", err)
+			}
+			bytes := p.Bytes()
+			x, y := bytes[1:33], bytes[33:]
+			if fmt.Sprintf("%x", x) != tt.x {
+				t.Errorf("bad x\ngot x = %x,\nwant    %s", x, tt.x)
+			}
+			if fmt.Sprintf("%x", y) != tt.y {
+				t.Errorf("bad y\ngot y = %x,\nwant    %s", y, tt.y)
+			}
+		})
+	}
+}
+
+func BenchmarkHashToCurve(b *testing.B) {
+	b.ReportAllocs()
+	dst := []byte("QUUX-V01-CS02-with-P256_XMD:SHA-256_SSWU_RO_")
+	msg := "a512_" + strings.Repeat("a", 512)
+	expandedBytes := expandMessage([]byte(msg), dst, 96)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := nistec.HashToCurve(expandedBytes)
+		if err != nil {
+			b.Fatalf("i=%d: %v", i, err)
+		}
+	}
+}
+
+func expandMessage(msg []byte, DST []byte, size int) (out []byte) {
+	h := sha256.New()
+	h.Write(make([]byte, h.BlockSize()))
+	h.Write(msg)
+	h.Write([]byte{byte(size) >> 8, byte(size)})
+	h.Write([]byte{0})
+	h.Write(DST)
+	dstLen := []byte{byte(len(DST))}
+	h.Write(dstLen)
+	b0 := h.Sum(nil)
+	h.Reset()
+	h.Write(b0)
+	h.Write([]byte{1})
+	h.Write(DST)
+	h.Write(dstLen)
+	bi := h.Sum(nil)
+	out = make([]byte, 0, size)
+	out = append(out, bi...)
+	for i := 2; len(out) < size; i++ {
+		h.Reset()
+		for i := range bi {
+			bi[i] ^= b0[i]
+		}
+		h.Write(bi)
+		h.Write([]byte{byte(i)})
+		h.Write(DST)
+		h.Write(dstLen)
+		h.Sum(bi[:0])
+		out = append(out, bi...)
+	}
+	return out
+
 }

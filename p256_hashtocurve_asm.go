@@ -16,19 +16,25 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 }
 
 func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
-	if len(bytes) != 32 {
-		return nil, errors.New("invalid P256 element encoding")
-	}
+	var sgn0u int
 	u := new(p256Element)
-	p256BigToLittle(u, (*[32]byte)(bytes[0:32]))
-	if p256LessThanP(u) == 0 {
+	switch len(bytes) {
+	case 48:
+		reduceBytes48(u, bytes)
+		p256FromMont(u, u)
+		sgn0u = int(u[0] & 1)
+		p256ToMont(u, u)
+	case 32:
+		p256BigToLittle(u, (*[32]byte)(bytes[0:32]))
+		if p256LessThanP(u) == 0 {
+			return nil, errors.New("invalid P256 element encoding")
+		}
+		sgn0u = int(bytes[len(bytes)-1] & 1)
+		// Convert u to montgomery domain
+		p256ToMont(u, u)
+	default:
 		return nil, errors.New("invalid P256 element encoding")
 	}
-	sgn0u := int(bytes[len(bytes)-1] & 1)
-
-	// Convert u to montgomery domain
-	rr := &p256Element{0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd}
-	p256Mul(u, u, rr)
 
 	// Steps:
 	// t1 = Z^2 * u^4 + Z * u^2
@@ -208,4 +214,67 @@ func p256SqrtRatio(z, u, v *p256Element) (isSquare int) {
 	p256Sqr(t0, z, 1)
 	p256Mul(t0, t0, v)
 	return p256Equal(t0, u)
+}
+
+func TestReduceBytes48(b []byte) []byte {
+	var p P256Point
+	reduceBytes48(&p.x, b)
+	p.y = p256Zero
+	p.z = p256One
+	out, _ := p.BytesX()
+	return out
+}
+
+func reduceBytes48(z *p256Element, b []byte) {
+	if len(b) < 48 {
+		panic("buffer too small")
+	}
+	x5 := b64load(b[0*8:])
+	x4 := b64load(b[1*8:])
+	x3 := b64load(b[2*8:])
+	e1 := &p256Element{x3, x4, x5, 0}
+	p256ToMont(e1, e1)
+
+	x2 := b64load(b[3*8:])
+	x1 := b64load(b[4*8:])
+	x0 := b64load(b[5*8:])
+	e0 := &p256Element{x0, x1, x2, 0}
+	p256ToMont(e0, e0)
+
+	x := &p256Element{0xfffffffeffffffff, 0xfffffffffffffffe, 0x200000000, 0x3} // 2^192
+	p256Mul(e1, e1, x)
+	p256Add(z, e1, e0)
+}
+
+func b64load(b []byte) uint64 {
+	_ = b[7] // bounds check hint
+	return uint64(b[7]) | uint64(b[6])<<8 | uint64(b[5])<<16 | uint64(b[4])<<24 |
+		uint64(b[3])<<32 | uint64(b[2])<<40 | uint64(b[1])<<48 | uint64(b[0])<<56
+}
+
+func p256ToMont(z, x *p256Element) {
+	rr := &p256Element{0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd}
+	p256Mul(z, x, rr)
+}
+
+func HashToCurve(expandedBytes []byte) (*P256Point, error) {
+	var p P256Point
+	return hashToCurve(&p, expandedBytes)
+}
+func hashToCurve(p *P256Point, expandedBytes []byte) (*P256Point, error) {
+	u0 := expandedBytes[0:48]
+	u1 := expandedBytes[48 : 2*48]
+	q0, err := P256MapToCurve(u0)
+	if err != nil {
+		return nil, err
+	}
+	//fmt.Printf("q0=%x\n", q0.Bytes()[1:])
+	q1, err := P256MapToCurve(u1)
+	if err != nil {
+		return nil, err
+	}
+	//fmt.Printf("q1=%x\n", q1.Bytes()[1:])
+	p.Add(q0, q1)
+	// The cofactor of P-256 is 1, so we don't need to clear it
+	return p, nil
 }
