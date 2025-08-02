@@ -32,7 +32,6 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 
 	zero := new(p256Element)
 	one := new(p256Element).One()
-	B := p256B()
 
 	// A = -3
 	A := new(p256Element)
@@ -45,25 +44,21 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 		Z.Sub(Z, one)
 	}
 
-	// Precompute -B/A and B/ZA
-	// TODO: cache these
 	t0 := new(p256Element) // temporary
-	negBoverA := new(p256Element).Mul(
-		new(p256Element).Sub(zero, B),
-		new(p256Element).Invert(A),
-	)
-	ZA := new(p256Element).Mul(Z, A)
-	BoverZA := new(p256Element).Mul(B, t0.Invert(ZA))
 
-	// 1. tv1 = inv0(Z^2 * u^4 + Z * u^2)
+	// 1. tv1 = Z^2 * u^4 + Z * u^2
 	Zu2 := new(p256Element).Mul(Z, t0.Square(u))
 	tv1 := new(p256Element).Add(Zu2, t0.Square(Zu2))
-	tv1.Invert(tv1)
-	// 2.  x1 = (-B / A) * (1 + tv1)
+	// 2.  x1 = -(B / A) * (1 + tv1) / tv1   if tv1 != 0
+	//           (B / A) *  1        / Z     if tv1 == 0
 	x1 := new(p256Element).Add(one, tv1)
-	x1.Mul(x1, negBoverA)
-	// 3.  If tv1 == 0, set x1 = B / (Z * A)
-	x1.Select(BoverZA, x1, tv1.IsZero())
+	x1.Mul(x1, p256B())
+	tv1.Sub(zero, tv1)
+	tv1.Select(Z, tv1, tv1.IsZero())
+	tv1.Mul(tv1, A)
+	tv1.Invert(tv1)
+	x1.Mul(x1, tv1)
+
 	// 4. gx1 = x1^3 + A * x1 + B
 	gx1 := new(p256Element)
 	p256Polynomial(gx1, x1)
