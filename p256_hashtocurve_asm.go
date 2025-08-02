@@ -62,17 +62,8 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p256Mul(x1, x1, BoverA)
 
 	x1d := new(p256Element)
-	if isZero == 1 { // TODO constant time
-		//fmt.Printf("tv1 is zero (u=%x)\n", bytes)
-		*x1d = *Z
-	} else {
-		*x1d = *t1
-	}
-
-	//   25.   x1 = x1 / x1d
-	//p256Inverse(x1d, x1d)
-	//p256Mul(x1, x1, x1d)
-	//*x1d = p256One
+	p256SelectCond(x1d, Z, t1, isZero)
+	//if isZero == 1 { fmt.Printf("tv1 is zero (u=%x)\n", bytes) }
 
 	// 4. gx1 = x1^3 + A * x1 x1d^2 + B x1d^3
 	// and gd = x1d^3
@@ -115,17 +106,10 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 
 	//   21.   x = CMOV(x, x1, is_gx1_square)
 	//   22.   y = CMOV(y, y1, is_gx1_square)
-	x := new(p256Element)
-	y := new(p256Element)
-	if isSquare == 1 {
-		// TODO: constant time
-		*x = *x1
-		*y = *y1
-	} else {
-		//fmt.Printf("isn't square (u=%x)\n", bytes)
-		*x = *x2
-		*y = *y2
-	}
+	x, y := x1, y1
+	p256SelectCond(x, x1, x2, isSquare)
+	p256SelectCond(y, y1, y2, isSquare)
+	//if isSquare == 0 { fmt.Printf("isn't square (u=%x)\n", bytes) }
 
 	// If sgn0(u) != sgn0(y), set y = -y
 	cond := sgn0u ^ sgn0(y)
@@ -143,6 +127,16 @@ func p256MapToCurve(p *P256Point, bytes []byte) (*P256Point, error) {
 	p.y = *y
 	p.z = *x1d
 	return p, nil
+}
+
+// Sets z to a if cond == 1 or b if cond == 0
+func p256SelectCond(z, a, b *p256Element, cond int) {
+	mask := -uint64(cond) // all ones if cond == 1, else all zeros
+	z[0] = a[0]&mask | b[0]&^mask
+	z[1] = a[1]&mask | b[1]&^mask
+	z[2] = a[2]&mask | b[2]&^mask
+	z[3] = a[3]&mask | b[3]&^mask
+
 }
 
 func sgn0(y *p256Element) int {
