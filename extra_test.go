@@ -43,11 +43,16 @@ func testNegate[P nistPointExtra[P]](t *testing.T, newPoint func() P, c elliptic
 	p := newPoint().SetGenerator()
 	p.Add(p, p) // make a test point with z != 1
 
-	p1 := newPoint().Negate(p)
-
 	minusOne := new(big.Int).Sub(c.Params().N, big.NewInt(1)).Bytes()
 	p2, err := newPoint().ScalarMult(p, minusOne)
 	fatalIfErr(t, err)
+
+	p1 := newPoint().Negate(p)
+
+	if bytes.Equal(p1.Bytes(), p.Bytes()) {
+		t.Error("-P == P")
+	}
+
 	if !bytes.Equal(p1.Bytes(), p2.Bytes()) {
 		t.Error("-P != [-1]P")
 	}

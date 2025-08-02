@@ -6,18 +6,11 @@
 
 package nistec
 
-import "filippo.io/nistec/internal/fiat"
-
 // Negate sets p = -q and returns p.
 func (p *P256Point) Negate(q *P256Point) *P256Point {
 	// fiat.P256Element is a little-endian Montgomery domain fully-reduced
 	// element, like p256Element, so they are actually interchangable.
-	qy := new(fiat.P256Element)
-	*qy.Bits() = q.y
-	py := new(fiat.P256Element).Sub(new(fiat.P256Element), qy)
-
-	p.x = q.x
-	p.y = *py.Bits()
-	p.z = q.z
+	p.Set(q)
+	p256NegCond(&p.y, 1)
 	return p
 }
