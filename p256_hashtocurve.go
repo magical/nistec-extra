@@ -2,18 +2,32 @@
 
 package nistec
 
-import "filippo.io/nistec/internal/fiat"
+import (
+	"errors"
+
+	"filippo.io/nistec/internal/fiat"
+)
 
 // RFC9380
 //
 // Section 6.6.2 Simplified Shallue-van de Woestijne-Ulas Method
 
 func P256MapToCurve(bytes []byte) (*P256Point, error) {
-	u, err := new(fiat.P256Element).SetBytes(bytes)
-	if err != nil {
-		return nil, err
+	var sgn0u byte
+	u := new(fiat.P256Element)
+	switch len(bytes) {
+	case 48:
+		reduceBytes48(u, bytes[0:48])
+		sgn0u = u.Bytes()[31] & 1
+	case 32:
+		if _, err := u.SetBytes(bytes[0:32]); err != nil {
+			return nil, err
+		}
+		sgn0u = bytes[len(bytes)-1] & 1
+	default:
+		return nil, errors.New("invalid P256 element encoding")
 	}
-	sgn0u := bytes[len(bytes)-1] & 1
+
 	zero := new(fiat.P256Element)
 	one := new(fiat.P256Element).One()
 	B := p256B()
@@ -97,10 +111,9 @@ func mysqrt(e, x *fiat.P256Element) (isSquare int) {
 // 5. P = clear_cofactor(R)
 // 6. return P
 
-func HashToCurve(bytes []byte) (*P256Point, error) {
-	var u0 []byte
-	var u1 []byte
-	//u0 := fiat.NewP256Element().SetBytes(u0)
+func HashToCurve(expandedBytes []byte) (*P256Point, error) {
+	u0 := expandedBytes[0:48]
+	u1 := expandedBytes[48 : 2*48]
 	q0, err := P256MapToCurve(u0)
 	if err != nil {
 		return nil, err
@@ -114,5 +127,24 @@ func HashToCurve(bytes []byte) (*P256Point, error) {
 	return p, nil
 }
 
-func GetX(p *P256Point) []byte { return p.x.Bytes() }
-func GetY(p *P256Point) []byte { return p.y.Bytes() }
+func TestReduceBytes48(b []byte) []byte {
+	var x fiat.P256Element
+	reduceBytes48(&x, b)
+	return x.Bytes()
+}
+
+func reduceBytes48(z *fiat.P256Element, b []byte) {
+	if len(b) < 48 {
+		panic("buffer too small")
+	}
+	var buf [32]byte
+	copy(buf[8:32], b[0:24])
+	e1, _ := new(fiat.P256Element).SetBytes(buf[:])
+	copy(buf[8:32], b[24:48])
+	e0, _ := new(fiat.P256Element).SetBytes(buf[:])
+	x, _ := new(fiat.P256Element).SetBytes([]byte{
+		0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) // 2^192
+	e1.Mul(e1, x)
+	z.Add(e1, e0)
+}
