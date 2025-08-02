@@ -113,7 +113,7 @@ func TestReduceBytes48(t *testing.T) {
 		b[16+i] = byte(i)
 	}
 	actual := nistec.TestReduceBytes48(b)
-	expected := ""
+	expected := "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 	if expected != fmt.Sprintf("%x", actual) {
 		t.Errorf("\ngot %x\nwant %s", actual, expected)
 	}
@@ -121,7 +121,7 @@ func TestReduceBytes48(t *testing.T) {
 	b = make([]byte, 48)
 	b[15] = 1
 	actual = nistec.TestReduceBytes48(b)
-	expected = ""
+	expected = "00000000fffffffeffffffffffffffffffffffff000000000000000000000001"
 	if expected != fmt.Sprintf("%x", actual) {
 		t.Errorf("\ngot %x\nwant %s", actual, expected)
 	}
@@ -131,7 +131,7 @@ func TestReduceBytes48(t *testing.T) {
 		b[i] = 1
 	}
 	actual = nistec.TestReduceBytes48(b)
-	expected = ""
+	expected = "fffffffefefefefffefefefefefefeff01010102030303030303030302020201"
 	if expected != fmt.Sprintf("%x", actual) {
 		t.Errorf("\ngot %x\nwant %s", actual, expected)
 	}
@@ -141,7 +141,7 @@ func TestReduceBytes48(t *testing.T) {
 		b[i] = 0xff
 	}
 	actual = nistec.TestReduceBytes48(b)
-	expected = ""
+	expected = "fffffffe00000001000000000000000200000002fffffffffffffffefffffffd"
 	if expected != fmt.Sprintf("%x", actual) {
 		t.Errorf("\ngot %x\nwant %s", actual, expected)
 	}
