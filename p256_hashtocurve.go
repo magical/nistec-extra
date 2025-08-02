@@ -4,6 +4,7 @@ package nistec
 
 import (
 	"errors"
+	"sync"
 
 	"filippo.io/nistec/internal/fiat"
 )
@@ -69,21 +70,39 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	p256Polynomial(gx2, x2)
 	// 7.  If is_square(gx1), set x = x1 and y = sqrt(gx1)
 	// 8.  Else set x = x2 and y = sqrt(gx2)
-	c0 := new(p256Element)
 	c1 := new(p256Element)
-	p256SqrtCandidate(c0, gx1)
-	p256SqrtCandidate(c1, gx2)
-	isSquare := gx1.Equal(t0.Square(c0))
+	c2 := new(p256Element)
+	p256SqrtCandidate(c1, gx1)
+	c2.Mul(Zu2, u)
+	c2.Mul(c2, p256sqrtNegZ())
+	c2.Mul(c2, c1)
+	isSquare := gx1.Equal(t0.Square(c1))
 	x := new(p256Element).Select(x1, x2, isSquare)
-	y := new(p256Element).Select(c0, c1, isSquare)
+	y := new(p256Element).Select(c1, c2, isSquare)
 	// 9.  If sgn0(u) != sgn0(y), set y = -y
-	yNeg := new(p256Element).Sub(zero, y)
 	yBytes := y.Bytes()
 	sgn0y := yBytes[len(yBytes)-1] & 1
+	yNeg := new(p256Element).Sub(zero, y)
 	y = y.Select(yNeg, y, int(sgn0u^sgn0y))
+
 	// 10. return (x, y)
 	return &P256Point{x, y, one}, nil
 }
+
+var p256sqrtNegZ = sync.OnceValue(func() *p256Element {
+	// x = -Z = 10
+	one := new(p256Element).One()
+	x := new(p256Element)
+	for i := 0; i < 10; i++ {
+		x.Add(x, one)
+	}
+	// x = sqrt(-Z)
+	if !p256Sqrt(x, x) {
+		panic("sqrt failed")
+	}
+	//fmt.Printf("%#v\n", x.Bytes())
+	return x
+})
 
 // mysqrt sets e to a candidate square root of x
 // and returns 1 if x is a square and 0 if not.
