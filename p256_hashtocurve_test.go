@@ -67,12 +67,12 @@ func TestMapToCurve(t *testing.T) {
 	} {
 		ubytes, err := hex.DecodeString(tt.u)
 		if err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 		p, err := nistec.P256MapToCurve(ubytes)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
-			return
+			continue
 		}
 		bytes := p.Bytes()
 		x, y := bytes[1:33], bytes[33:]
@@ -197,6 +197,7 @@ func TestHashToCurve(t *testing.T) {
 			p, err := nistec.HashToCurve(expandedBytes)
 			if err != nil {
 				t.Errorf("MapToCurve failed: %v", err)
+				return
 			}
 			bytes := p.Bytes()
 			x, y := bytes[1:33], bytes[33:]
