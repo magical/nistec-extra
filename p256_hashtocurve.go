@@ -12,9 +12,11 @@ import (
 //
 // Section 6.6.2 Simplified Shallue-van de Woestijne-Ulas Method
 
+type p256Element = fiat.P256Element
+
 func P256MapToCurve(bytes []byte) (*P256Point, error) {
 	var sgn0u byte
-	u := new(fiat.P256Element)
+	u := new(p256Element)
 	switch len(bytes) {
 	case 48:
 		reduceBytes48(u, bytes[0:48])
@@ -28,59 +30,59 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 		return nil, errors.New("invalid P256 element encoding")
 	}
 
-	zero := new(fiat.P256Element)
-	one := new(fiat.P256Element).One()
+	zero := new(p256Element)
+	one := new(p256Element).One()
 	B := p256B()
 
 	// A = -3
-	A := new(fiat.P256Element)
+	A := new(p256Element)
 	for i := 0; i < 3; i++ {
 		A.Sub(A, one)
 	}
 	// Z = -10
-	Z := new(fiat.P256Element)
+	Z := new(p256Element)
 	for i := 0; i < 10; i++ {
 		Z.Sub(Z, one)
 	}
 
 	// Precompute -B/A and B/ZA
 	// TODO: cache these
-	t0 := new(fiat.P256Element) // temporary
-	negBoverA := new(fiat.P256Element).Mul(
-		new(fiat.P256Element).Sub(zero, B),
-		new(fiat.P256Element).Invert(A),
+	t0 := new(p256Element) // temporary
+	negBoverA := new(p256Element).Mul(
+		new(p256Element).Sub(zero, B),
+		new(p256Element).Invert(A),
 	)
-	ZA := new(fiat.P256Element).Mul(Z, A)
-	BoverZA := new(fiat.P256Element).Mul(B, t0.Invert(ZA))
+	ZA := new(p256Element).Mul(Z, A)
+	BoverZA := new(p256Element).Mul(B, t0.Invert(ZA))
 
 	// 1. tv1 = inv0(Z^2 * u^4 + Z * u^2)
-	Zu2 := new(fiat.P256Element).Mul(Z, t0.Square(u))
-	tv1 := new(fiat.P256Element).Add(Zu2, t0.Square(Zu2))
+	Zu2 := new(p256Element).Mul(Z, t0.Square(u))
+	tv1 := new(p256Element).Add(Zu2, t0.Square(Zu2))
 	tv1.Invert(tv1)
 	// 2.  x1 = (-B / A) * (1 + tv1)
-	x1 := new(fiat.P256Element).Add(one, tv1)
+	x1 := new(p256Element).Add(one, tv1)
 	x1.Mul(x1, negBoverA)
 	// 3.  If tv1 == 0, set x1 = B / (Z * A)
 	x1.Select(BoverZA, x1, tv1.IsZero())
 	// 4. gx1 = x1^3 + A * x1 + B
-	gx1 := new(fiat.P256Element)
+	gx1 := new(p256Element)
 	p256Polynomial(gx1, x1)
 	// 5.  x2 = Z * u^2 * x1
-	x2 := new(fiat.P256Element).Mul(Zu2, x1)
+	x2 := new(p256Element).Mul(Zu2, x1)
 	// 6. gx2 = x2^3 + A * x2 + B
-	gx2 := new(fiat.P256Element)
+	gx2 := new(p256Element)
 	p256Polynomial(gx2, x2)
 	// 7.  If is_square(gx1), set x = x1 and y = sqrt(gx1)
 	// 8.  Else set x = x2 and y = sqrt(gx2)
-	c0 := new(fiat.P256Element)
-	c1 := new(fiat.P256Element)
+	c0 := new(p256Element)
+	c1 := new(p256Element)
 	p256SqrtCandidate(c0, gx1)
 	p256SqrtCandidate(c1, gx2)
 	isSquare := gx1.Equal(t0.Square(c0))
-	x := new(fiat.P256Element).Select(x1, x2, isSquare)
-	y := new(fiat.P256Element).Select(c0, c1, isSquare)
+	x := new(p256Element).Select(x1, x2, isSquare)
+	y := new(p256Element).Select(c0, c1, isSquare)
 	// 9.  If sgn0(u) != sgn0(y), set y = -y
-	yNeg := new(fiat.P256Element).Sub(zero, y)
+	yNeg := new(p256Element).Sub(zero, y)
 	yBytes := y.Bytes()
 	sgn0y := yBytes[len(yBytes)-1] & 1
 	y = y.Select(yNeg, y, int(sgn0u^sgn0y))
@@ -90,9 +92,9 @@ func P256MapToCurve(bytes []byte) (*P256Point, error) {
 
 // mysqrt sets e to a candidate square root of x
 // and returns 1 if x is a square and 0 if not.
-func mysqrt(e, x *fiat.P256Element) (isSquare int) {
+func mysqrt(e, x *p256Element) (isSquare int) {
 	p256SqrtCandidate(e, x)
-	square := new(fiat.P256Element).Square(e)
+	square := new(p256Element).Square(e)
 	return square.Equal(x)
 }
 
@@ -128,21 +130,21 @@ func HashToCurve(expandedBytes []byte) (*P256Point, error) {
 }
 
 func TestReduceBytes48(b []byte) []byte {
-	var x fiat.P256Element
+	var x p256Element
 	reduceBytes48(&x, b)
 	return x.Bytes()
 }
 
-func reduceBytes48(z *fiat.P256Element, b []byte) {
+func reduceBytes48(z *p256Element, b []byte) {
 	if len(b) < 48 {
 		panic("buffer too small")
 	}
 	var buf [32]byte
 	copy(buf[8:32], b[0:24])
-	e1, _ := new(fiat.P256Element).SetBytes(buf[:])
+	e1, _ := new(p256Element).SetBytes(buf[:])
 	copy(buf[8:32], b[24:48])
-	e0, _ := new(fiat.P256Element).SetBytes(buf[:])
-	x, _ := new(fiat.P256Element).SetBytes([]byte{
+	e0, _ := new(p256Element).SetBytes(buf[:])
+	x, _ := new(p256Element).SetBytes([]byte{
 		0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) // 2^192
 	e1.Mul(e1, x)
