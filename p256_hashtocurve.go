@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"filippo.io/nistec/internal/fiat"
+	"github.com/magical/nistec-extra/internal/fiat"
 )
 
 // RFC9380

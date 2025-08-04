@@ -4,7 +4,7 @@
 
 package nistec
 
-import "filippo.io/nistec/internal/fiat"
+import "github.com/magical/nistec-extra/internal/fiat"
 
 // Negate sets p = -q and returns p.
 func (p *P224Point) Negate(q *P224Point) *P224Point {

@@ -12,7 +12,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"filippo.io/nistec"
+	"github.com/magical/nistec-extra"
 )
 
 func TestAllocations(t *testing.T) {

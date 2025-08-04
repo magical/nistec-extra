@@ -7,7 +7,7 @@ package fiat_test
 import (
 	"testing"
 
-	"filippo.io/nistec/internal/fiat"
+	"github.com/magical/nistec-extra/internal/fiat"
 )
 
 func BenchmarkMul(b *testing.B) {

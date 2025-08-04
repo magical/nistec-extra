@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"filippo.io/nistec"
+	"github.com/magical/nistec-extra"
 )
 
 func TestMapToCurve(t *testing.T) {

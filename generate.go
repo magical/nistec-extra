@@ -154,7 +154,7 @@ package nistec
 import (
 	"crypto/subtle"
 	"errors"
-	"filippo.io/nistec/internal/fiat"
+	"github.com/magical/nistec-extra/internal/fiat"
 	"sync"
 )
 
