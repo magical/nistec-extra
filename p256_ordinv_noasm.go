@@ -8,6 +8,6 @@ package nistec
 
 import "errors"
 
-func p256OrdInverse(k []byte) ([]byte, error) {
+func P256OrdInverse(k []byte) ([]byte, error) {
 	return nil, errors.New("unimplemented")
 }
