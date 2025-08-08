@@ -15,3 +15,8 @@ func (p *P256Point) Negate(q *P256Point) *P256Point {
 	p.z.Set(q.z)
 	return p
 }
+
+// IsZero returns 1 if p is the identity point, otherwise 0.
+func (p *P256Point) IsZero() int {
+	return p.z.IsZero()
+}

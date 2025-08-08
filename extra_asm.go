@@ -14,3 +14,8 @@ func (p *P256Point) Negate(q *P256Point) *P256Point {
 	p256NegCond(&p.y, 1)
 	return p
 }
+
+// IsZero returns 1 if p is the identity point, otherwise 0.
+func (p *P256Point) IsZero() int {
+	return p256Equal(&p.z, &p256Zero)
+}
